@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Text;
 
 using NSDotnet.Enums;
@@ -134,6 +135,39 @@ namespace NSDotnet
 
             // Make the request
             var Req = await client.GetAsync(Address);
+            
+            // Do rate limit calculations
+            Get_Rate_Limit_Delay(Req);
+            Last_Request = DateTime.Now;
+            return Req;
+        }
+
+        /// <summary>
+        /// Makes a request to the speicifed URI - note that requests may be delayed by
+        /// up to 30 seconds depending on if the rate-limit ceiling has been hit
+        /// <param name="Address" type="URI">The URI to request from</param>
+        /// <param name="Pass">The password accompanying this request</param>
+        /// <returns>The HttpResponseMessage from the host</returns>
+        /// </summary>
+        public async Task<HttpResponseMessage?> MakeRequest(string Address, string Pass)
+        {
+            if(_userAgent == null || _userAgent.Trim() == string.Empty)
+                throw new InvalidOperationException("No User-Agent set.");
+
+            // If you've waited a minute already, don't wait another minute for no reason
+            TimeSpan Delta = DateTime.Now - Last_Request;
+            if(Delta.TotalSeconds < Next_Delay)
+            {
+                await Task.Delay(Next_Delay * 1000);
+                Next_Delay = 0;
+            }
+
+            client.DefaultRequestHeaders.Add("X-Password", Pass); //This is dumb!!!
+
+            // Make the request
+            var Req = await client.GetAsync(Address);
+
+            client.DefaultRequestHeaders.Remove("X-Password");
             
             // Do rate limit calculations
             Get_Rate_Limit_Delay(Req);
